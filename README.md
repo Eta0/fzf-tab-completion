@@ -35,6 +35,8 @@ rather than [creating a new mechanism](https://github.com/junegunn/fzf/wiki/Exam
 
     Avoid changing these `fzf` flags: `-n`, `--nth`, `--with-nth`, `-d`
 
+    For bash, also avoid `--expect` and `--print-query`.
+
 ## zsh
 
 Add to your `~/.zshrc`:
@@ -159,21 +161,37 @@ you will need to enable fzf's bash completion _as well_.
 If you are using a `bash` that is dynamically linked against readline (`LD_PRELOAD= ldd $(which bash)`)
 you may prefer (or not!) to use the [readline](#readline) method instead.
 
+#### Selecting a match
+
+fzf opens below the prompt with the word being completed as its query,
+which you can keep typing into or erase.
+Files and directories are listed by name alone, without the directory part already typed,
+and the query starts with the same part of the word.
+Among equally good matches, the ones matching nearer their start come first.
+
+* `Tab` and `Shift-Tab` move down and up the list, wrapping around at either end.
+* `Ctrl-Space` marks several matches, which are inserted separated by spaces.
+* `Backspace` on an empty query closes fzf.
+* `/` on a directory inserts it and completes inside it.
+* `Enter` inserts the selected match.
+
+Options in `$FZF_COMPLETION_OPTS` are passed on to fzf and can change these keys.
+
 #### Changing fzf prompt
 
-The `FZF_TAB_COMPLETION_PROMPT` environment variable sets the prompt prefix
+The `FZF_TAB_COMPLETION_PROMPT` environment variable sets fzf's prompt.
 The default is `'> '`.
+If a loading message hides the line being completed, fzf's prompt also shows the part of it before the query.
 You could, for example, change it to `FZF_TAB_COMPLETION_PROMPT='❯ '`. 
 
 #### Autocomplete common prefix
 
-By default, fzf is always shown whenever there are at least 2 matches.
-You can change this to a more "vanilla" tab completion experience where
-it attempts to complete the longest common prefix *before* showing matches in fzf.
+Like `bash`'s own tab completion, the longest prefix common to all matches is completed
+*before* showing matches in fzf, when it extends the word being completed and is a match itself.
 
 This is controlled by the variables
-* `FZF_COMPLETION_AUTO_COMMON_PREFIX=true` - completes the common prefix if it is also a match
-* `FZF_COMPLETION_AUTO_COMMON_PREFIX_PART=true` - with the above variable, completes the common prefix even if it is not a match
+* `FZF_COMPLETION_AUTO_COMMON_PREFIX=false` - always shows fzf whenever there are at least 2 matches
+* `FZF_COMPLETION_AUTO_COMMON_PREFIX_PART=true` - completes the common prefix even if it is not a match
 
 For example, if we have following files in a directory:
 ```
@@ -183,32 +201,56 @@ abc
 other
 ```
 
-With `FZF_COMPLETION_AUTO_COMMON_PREFIX=true`:
-* when completing `ls <tab>`, it will display fzf with all 4 files (as normal)
+By default:
+* when completing `ls <tab>`, it will display fzf with all 4 files
 * when completing `ls a<tab>`, it will automatically complete to `ls abc`.
     Pressing tab again will show fzf with the first 3 files.
-* when completing `ls abcd<tab>` it will show fzf with the first 2 files (as normal)
+* when completing `ls abcd<tab>` it will show fzf with the first 2 files
 * With `FZF_COMPLETION_AUTO_COMMON_PREFIX_PART=true` set as well:
     * when completing `ls abcd<tab>`, it will automatically complete to `ls abcdef-`.
         Pressing tab again will show fzf with the first 2 files.
+* With `FZF_COMPLETION_AUTO_COMMON_PREFIX=false`:
+    * when completing `ls a<tab>`, it will display fzf with the first 3 files.
+
+#### Aliases
+
+An alias at the start of the line is replaced by its text before completing,
+so with `alias ll='ls -l'`, `ll <tab>` completes like `ls -l <tab>`.
+
+Set `FZF_COMPLETION_KEEP_ALIASES` to a space-separated list of aliases that keep their own completion
+when they have one, or to `:all:` for every alias.
+For example, with `alias ls=eza` and `FZF_COMPLETION_KEEP_ALIASES=ls`,
+`ls <tab>` uses the completion for `ls` instead of the one for `eza`.
 
 #### tmux
 
 `$FZF_TMUX_OPTS` is respected same as in [fzf](https://github.com/junegunn/fzf#key-bindings-for-command-line)
 however you must have fzf's keybindings enabled as well.
 
+#### fzf height
+
+With fzf 0.34 or later, fzf shrinks to fit a short list.
+When `$FZF_TMUX_HEIGHT` is unset, fzf grows to fill the space below the cursor
+if that is more than 40% of the terminal.
+Finding the cursor position takes a round trip to the terminal,
+which over a slow SSH connection can take longer than the rest of the completion.
+So over SSH fzf always uses 40% of the terminal.
+Set `FZF_COMPLETION_SSH_CURSOR_QUERY=true` to look up the cursor position over SSH as well,
+for example on a fast local network.
+
 #### Custom loading message
 
 `bash` clears the prompt and input line before running the completion,
-so a loading message is printed instead.
+so the last line of the prompt and the input line are printed again in their place.
+This keeps fast completions from flickering.
+A prompt that runs commands through `$(...)` or backticks would run them again on every completion,
+so for such prompts, and on `bash` older than 4.4, the message `Loading matches ...` is printed instead.
 
-You can customise the message by overriding the `_fzf_bash_completion_loading_msg()` function.
-
-For example the following "re-prints" the prompt and input line
-to make this less jarring
-(note this may or may not work, there's no detection of `$PS2` and there is always some unavoidable flicker):
+You can customise the message by defining a `_fzf_bash_completion_loading_msg()` function
+that prints it, before or after sourcing the script.
+For example the following always prints a fixed message:
 ```bash
-_fzf_bash_completion_loading_msg() { echo "${PS1@P}${READLINE_LINE}" | tail -n1; }
+_fzf_bash_completion_loading_msg() { echo 'Loading matches ...'; }
 ```
 
 ## readline
